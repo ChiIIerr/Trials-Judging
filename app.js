@@ -20,40 +20,28 @@ let currentPlayer = null;
 // --- SUBMISSION LOGIC (for submit.html) ---
 
 async function submitLink() {
+    // ... submitLink function remains unchanged ...
     const linkInput = document.getElementById('trials-link-input');
     const statusEl = document.getElementById('submit-status');
     const trialsLink = linkInput.value.trim();
 
-    // Basic validation to ensure it's a trials.report link
     if (!trialsLink.startsWith("https://trials.report/report/")) {
         statusEl.textContent = "Error: Please enter a valid Trials Report URL.";
         return;
     }
-
     statusEl.textContent = "Submitting...";
-
     try {
-        // We need a unique ID for our database document. The player's membershipType
-        // and membershipId from the URL are perfect for this.
-        // Example URL: https://trials.report/report/3/4611686018467347034
-        // We want to extract "3/4611686018467347034"
         const urlParts = trialsLink.split('/');
         if (urlParts.length < 5) throw new Error("Invalid URL format.");
-        
-        // The unique ID will be the last two parts of the URL path
         const uniqueId = `${urlParts[urlParts.length - 2]}-${urlParts[urlParts.length - 1]}`;
-
-        // Add the player link to Firestore using our extracted uniqueId
         await db.collection('players').doc(uniqueId).set({
             trialsLink: trialsLink,
             votes_cheater: 0,
             votes_legit: 0,
             submitted_at: new Date()
-        }, { merge: true }); // Use merge to not overwrite votes if re-submitted
-
+        }, { merge: true });
         statusEl.textContent = `Success! The link has been added to the review queue.`;
         linkInput.value = '';
-
     } catch (error) {
         statusEl.textContent = `Error: ${error.message}`;
     }
@@ -74,59 +62,84 @@ async function loadRandomPlayer() {
         return;
     }
 
-    // Pick a random player document
-    const players = snapshot.docs;
-    const randomDoc = players[Math.floor(Math.random() * players.length)];
+    // Get the list of player IDs the user has already voted on
+    const votedIDs = JSON.parse(localStorage.getItem('votedPlayerIDs') || '[]');
+
+    // Filter the full list of players down to only those the user has NOT voted on
+    const availablePlayers = snapshot.docs.filter(doc => !votedIDs.includes(doc.id));
+
+    // Handle the case where the user has voted on every single player
+    if (availablePlayers.length === 0) {
+        document.getElementById('loading').innerHTML = "Wow, you've voted on everyone!<br>Check back later for new submissions.";
+        return;
+    }
+
+    // Pick a random player from the *available* (un-voted) list
+    const randomDoc = availablePlayers[Math.floor(Math.random() * availablePlayers.length)];
     currentPlayer = { id: randomDoc.id, ...randomDoc.data() };
 
-    // This is now much simpler: just render the link.
     renderPlayerCard(currentPlayer);
 }
 
 function renderPlayerCard(playerData) {
-    // Get the link element and set its href attribute
+    // ... renderPlayerCard function remains unchanged ...
     const linkDisplay = document.getElementById('player-link-display');
     linkDisplay.href = playerData.trialsLink;
-
-    // Show the card
     document.getElementById('loading').style.display = 'none';
     document.getElementById('player-card').style.display = 'block';
-    
-    // Make sure voting buttons are enabled and results are hidden
     document.getElementById('vote-cheater').disabled = false;
     document.getElementById('vote-legit').disabled = false;
     document.getElementById('results').style.display = 'none';
 }
 
 async function castVote(voteType) {
-    // Disable buttons to prevent double-voting
-    document.getElementById('vote-cheater').disabled = true;
-    document.getElementById('vote-legit').disabled = true;
+    const cheaterButton = document.getElementById('vote-cheater');
+    const legitButton = document.getElementById('vote-legit');
+    cheaterButton.disabled = true;
+    legitButton.disabled = true;
 
-    const fieldToIncrement = `votes_${voteType}`;
+    try {
+        const fieldToIncrement = `votes_${voteType}`;
+        const playerRef = db.collection('players').doc(currentPlayer.id);
+        
+        await playerRef.update({
+            [fieldToIncrement]: firebase.firestore.FieldValue.increment(1)
+        });
 
-    const playerRef = db.collection('players').doc(currentPlayer.id);
-    await playerRef.update({
-        [fieldToIncrement]: firebase.firestore.FieldValue.increment(1)
-    });
+        // Get the list of IDs the user has already voted on from localStorage
+        const votedHistory = JSON.parse(localStorage.getItem('votedPlayerIDs') || '[]');
+        
+        // Add the ID of the player they just voted on
+        if (!votedHistory.includes(currentPlayer.id)) {
+            votedHistory.push(currentPlayer.id);
+        }
+        
+        // Save the updated list back to localStorage
+        localStorage.setItem('votedPlayerIDs', JSON.stringify(votedHistory));
 
-    showResults();
+        showResults();
+    } catch (error) {
+        console.error("Error casting vote:", error);
+        alert("Could not cast vote. Check console for details.");
+        cheaterButton.disabled = false;
+        legitButton.disabled = false;
+    }
 }
 
-async function showResults() {
-    // Get the fresh data after our vote
-    const updatedDoc = await db.collection('players').doc(currentPlayer.id).get();
-    const data = updatedDoc.data();
+function showResults() {
+    // ... showResults function remains unchanged ...
+    db.collection('players').doc(currentPlayer.id).get().then(updatedDoc => {
+        const data = updatedDoc.data();
+        const cheaterVotes = data.votes_cheater;
+        const legitVotes = data.votes_legit;
+        const totalVotes = cheaterVotes + legitVotes;
+        const confidence = totalVotes === 0 ? 0 : (cheaterVotes / totalVotes * 100);
 
-    const cheaterVotes = data.votes_cheater;
-    const legitVotes = data.votes_legit;
-    const totalVotes = cheaterVotes + legitVotes;
-    const confidence = totalVotes === 0 ? 0 : (cheaterVotes / totalVotes * 100);
+        document.getElementById('confidence-level').textContent = 
+            `Confidence Level: ${confidence.toFixed(1)}% believe this player is cheating.`;
+        document.getElementById('vote-counts').textContent = 
+            `Based on ${totalVotes} votes (${cheaterVotes} for cheater, ${legitVotes} for legit).`;
 
-    document.getElementById('confidence-level').textContent = 
-        `Confidence Level: ${confidence.toFixed(1)}% believe this player is cheating.`;
-    document.getElementById('vote-counts').textContent = 
-        `Based on ${totalVotes} votes (${cheaterVotes} for cheater, ${legitVotes} for legit).`;
-
-    document.getElementById('results').style.display = 'block';
+        document.getElementById('results').style.display = 'block';
+    });
 }
