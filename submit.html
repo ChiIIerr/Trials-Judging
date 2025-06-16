@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Report a Player</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <h1>Report a Suspected Player</h1>
+    <p>Submit a player's Bungie Name (e.g., Guardian#1234). They will be added to the queue for community review.</p>
+    
+    <input type="text" id="bungie-name-input" placeholder="Guardian#1234">
+    <button onclick="submitPlayer()">Submit for Review</button>
+    <p id="submit-status"></p>
+
+    <a href="index.html">Back to Judging</a>
+
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
