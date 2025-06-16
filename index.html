@@ -7,14 +7,14 @@
 </head>
 <body>
     <h1>Is this player cheating?</h1>
-    <p>Review the stats and cast your vote. Your vote helps train the community's perception.</p>
+    <p>Click the link to review the player's stats on Trials Report, then cast your vote.</p>
 
     <div id="loading">Loading next player...</div>
 
+    <!-- Simplified the player card significantly -->
     <div id="player-card" style="display:none;">
-        <h2 id="player-name"></h2>
-        <div id="player-stats"></div>
-        <div id="player-links"></div>
+        <h3>Review this player:</h3>
+        <a id="player-link-display" href="#" target="_blank" class="player-link">View on Trials Report</a>
         
         <div class="voting-booth">
             <h3>Your Verdict:</h3>
