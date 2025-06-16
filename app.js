@@ -20,7 +20,6 @@ let currentPlayer = null;
 // --- SUBMISSION LOGIC (for submit.html) ---
 
 async function submitLink() {
-    // ... submitLink function remains unchanged ...
     const linkInput = document.getElementById('trials-link-input');
     const statusEl = document.getElementById('submit-status');
     const trialsLink = linkInput.value.trim();
@@ -29,19 +28,25 @@ async function submitLink() {
         statusEl.textContent = "Error: Please enter a valid Trials Report URL.";
         return;
     }
+
     statusEl.textContent = "Submitting...";
+
     try {
         const urlParts = trialsLink.split('/');
         if (urlParts.length < 5) throw new Error("Invalid URL format.");
+        
         const uniqueId = `${urlParts[urlParts.length - 2]}-${urlParts[urlParts.length - 1]}`;
+
         await db.collection('players').doc(uniqueId).set({
             trialsLink: trialsLink,
             votes_cheater: 0,
             votes_legit: 0,
             submitted_at: new Date()
         }, { merge: true });
+
         statusEl.textContent = `Success! The link has been added to the review queue.`;
         linkInput.value = '';
+
     } catch (error) {
         statusEl.textContent = `Error: ${error.message}`;
     }
@@ -50,41 +55,39 @@ async function submitLink() {
 // --- JUDGMENT LOGIC (for index.html) ---
 
 async function loadRandomPlayer() {
-    // Show loading state and hide old data
     document.getElementById('loading').style.display = 'block';
     document.getElementById('player-card').style.display = 'none';
     document.getElementById('results').style.display = 'none';
 
-    // Fetch all players from Firestore
-    const snapshot = await db.collection('players').get();
-    if (snapshot.empty) {
-        document.getElementById('loading').textContent = "No players in the queue. Submit a link!";
-        return;
+    try {
+        const snapshot = await db.collection('players').get();
+        if (snapshot.empty) {
+            document.getElementById('loading').textContent = "No players in the queue. Submit one!";
+            return;
+        }
+
+        const votedIDs = JSON.parse(localStorage.getItem('votedPlayerIDs') || '[]');
+        const availablePlayers = snapshot.docs.filter(doc => !votedIDs.includes(doc.id));
+
+        if (availablePlayers.length === 0) {
+            document.getElementById('loading').innerHTML = "Wow, you've voted on everyone!<br>Check back later for new submissions.";
+            return;
+        }
+
+        const randomDoc = availablePlayers[Math.floor(Math.random() * availablePlayers.length)];
+        currentPlayer = { id: randomDoc.id, ...randomDoc.data() };
+        renderPlayerCard(currentPlayer);
+
+    } catch (error) {
+        console.error("Error loading random player:", error);
+        document.getElementById('loading').textContent = "Error loading player. Please refresh.";
     }
-
-    // Get the list of player IDs the user has already voted on
-    const votedIDs = JSON.parse(localStorage.getItem('votedPlayerIDs') || '[]');
-
-    // Filter the full list of players down to only those the user has NOT voted on
-    const availablePlayers = snapshot.docs.filter(doc => !votedIDs.includes(doc.id));
-
-    // Handle the case where the user has voted on every single player
-    if (availablePlayers.length === 0) {
-        document.getElementById('loading').innerHTML = "Wow, you've voted on everyone!<br>Check back later for new submissions.";
-        return;
-    }
-
-    // Pick a random player from the *available* (un-voted) list
-    const randomDoc = availablePlayers[Math.floor(Math.random() * availablePlayers.length)];
-    currentPlayer = { id: randomDoc.id, ...randomDoc.data() };
-
-    renderPlayerCard(currentPlayer);
 }
 
 function renderPlayerCard(playerData) {
-    // ... renderPlayerCard function remains unchanged ...
     const linkDisplay = document.getElementById('player-link-display');
     linkDisplay.href = playerData.trialsLink;
+    
     document.getElementById('loading').style.display = 'none';
     document.getElementById('player-card').style.display = 'block';
     document.getElementById('vote-cheater').disabled = false;
@@ -106,18 +109,14 @@ async function castVote(voteType) {
             [fieldToIncrement]: firebase.firestore.FieldValue.increment(1)
         });
 
-        // Get the list of IDs the user has already voted on from localStorage
         const votedHistory = JSON.parse(localStorage.getItem('votedPlayerIDs') || '[]');
-        
-        // Add the ID of the player they just voted on
         if (!votedHistory.includes(currentPlayer.id)) {
             votedHistory.push(currentPlayer.id);
         }
-        
-        // Save the updated list back to localStorage
         localStorage.setItem('votedPlayerIDs', JSON.stringify(votedHistory));
 
-        showResults();
+        await showResults();
+
     } catch (error) {
         console.error("Error casting vote:", error);
         alert("Could not cast vote. Check console for details.");
@@ -126,10 +125,11 @@ async function castVote(voteType) {
     }
 }
 
-function showResults() {
-    // ... showResults function remains unchanged ...
-    db.collection('players').doc(currentPlayer.id).get().then(updatedDoc => {
+async function showResults() {
+    try {
+        const updatedDoc = await db.collection('players').doc(currentPlayer.id).get();
         const data = updatedDoc.data();
+
         const cheaterVotes = data.votes_cheater;
         const legitVotes = data.votes_legit;
         const totalVotes = cheaterVotes + legitVotes;
@@ -141,5 +141,55 @@ function showResults() {
             `Based on ${totalVotes} votes (${cheaterVotes} for cheater, ${legitVotes} for legit).`;
 
         document.getElementById('results').style.display = 'block';
-    });
+
+        await updateTopCheatersList();
+
+    } catch (error) {
+        console.error("Error showing results:", error);
+    }
+}
+
+async function updateTopCheatersList() {
+    const listElement = document.getElementById('top-cheaters-list');
+    listElement.innerHTML = '<li>Loading leaderboard...</li>';
+
+    try {
+        const snapshot = await db.collection('players').get();
+        const players = [];
+        snapshot.forEach(doc => {
+            players.push({ id: doc.id, ...doc.data() });
+        });
+
+        const candidates = players.filter(p => {
+            const totalVotes = p.votes_cheater + p.votes_legit;
+            const cheaterPercentage = totalVotes > 0 ? (p.votes_cheater / totalVotes) : 0;
+            return totalVotes >= 50 && cheaterPercentage > 0.5;
+        });
+
+        candidates.sort((a, b) => b.votes_cheater - a.votes_cheater);
+
+        const topPlayers = candidates.slice(0, 10);
+
+        listElement.innerHTML = '';
+
+        if (topPlayers.length === 0) {
+            listElement.innerHTML = '<li>No players currently meet the criteria.</li>';
+        } else {
+            topPlayers.forEach(player => {
+                const totalVotes = player.votes_cheater + player.votes_legit;
+                const confidence = (player.votes_cheater / totalVotes * 100).toFixed(1);
+                const listItem = document.createElement('li');
+                listItem.innerHTML = `
+                    <a href="${player.trialsLink}" target="_blank">View on Trials Report</a>
+                    <span class="vote-details">
+                        ${player.votes_cheater} Cheater Votes (${confidence}%) out of ${totalVotes} total.
+                    </span>
+                `;
+                listElement.appendChild(listItem);
+            });
+        }
+    } catch (error) {
+        console.error("Failed to update top cheaters list:", error);
+        listElement.innerHTML = '<li>Error loading leaderboard.</li>';
+    }
 }
