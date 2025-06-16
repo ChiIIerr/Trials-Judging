@@ -6,11 +6,12 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <h1>Report a Suspected Player</h1>
-    <p>Submit a player's Bungie Name (e.g., Guardian#1234). They will be added to the queue for community review.</p>
+    <h1>Submit a Trials Report Link</h1>
+    <p>Paste the full Trials Report URL for a player you want the community to review.</p>
     
-    <input type="text" id="bungie-name-input" placeholder="Guardian#1234">
-    <button onclick="submitPlayer()">Submit for Review</button>
+    <!-- Changed input to ask for a link -->
+    <input type="text" id="trials-link-input" placeholder="https://trials.report/report/...">
+    <button onclick="submitLink()">Submit for Review</button>
     <p id="submit-status"></p>
 
     <a href="index.html">Back to Judging</a>
