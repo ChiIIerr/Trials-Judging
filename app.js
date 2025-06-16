@@ -130,8 +130,8 @@ async function showResults() {
         const updatedDoc = await db.collection('players').doc(currentPlayer.id).get();
         const data = updatedDoc.data();
 
-        const cheaterVotes = data.votes_cheater;
-        const legitVotes = data.votes_legit;
+        const cheaterVotes = data.votes_cheater || 0;
+        const legitVotes = data.votes_legit || 0;
         const totalVotes = cheaterVotes + legitVotes;
         const confidence = totalVotes === 0 ? 0 : (cheaterVotes / totalVotes * 100);
 
@@ -161,35 +161,48 @@ async function updateTopCheatersList() {
         });
 
         const candidates = players.filter(p => {
-            const totalVotes = p.votes_cheater + p.votes_legit;
-            const cheaterPercentage = totalVotes > 0 ? (p.votes_cheater / totalVotes) : 0;
+            // This defensive code prevents crashes from malformed data.
+            // It provides a default value of 0 if a field is missing.
+            const cheaterVotes = p.votes_cheater || 0;
+            const legitVotes = p.votes_legit || 0;
+            const totalVotes = cheaterVotes + legitVotes;
+            
+            const cheaterPercentage = totalVotes > 0 ? (cheaterVotes / totalVotes) : 0;
+            
             return totalVotes >= 50 && cheaterPercentage > 0.5;
         });
 
-        candidates.sort((a, b) => b.votes_cheater - a.votes_cheater);
+        // Also make the sort function defensive.
+        candidates.sort((a, b) => (b.votes_cheater || 0) - (a.votes_cheater || 0));
 
         const topPlayers = candidates.slice(0, 10);
 
+        // This line will now be reached because the function won't crash.
         listElement.innerHTML = '';
 
         if (topPlayers.length === 0) {
             listElement.innerHTML = '<li>No players currently meet the criteria.</li>';
         } else {
             topPlayers.forEach(player => {
-                const totalVotes = player.votes_cheater + player.votes_legit;
-                const confidence = (player.votes_cheater / totalVotes * 100).toFixed(1);
+                // Use the same defensive variables for rendering.
+                const cheaterVotes = player.votes_cheater || 0;
+                const legitVotes = player.votes_legit || 0;
+                const totalVotes = cheaterVotes + legitVotes;
+                const confidence = (cheaterVotes / totalVotes * 100).toFixed(1);
+
                 const listItem = document.createElement('li');
                 listItem.innerHTML = `
                     <a href="${player.trialsLink}" target="_blank">View on Trials Report</a>
                     <span class="vote-details">
-                        ${player.votes_cheater} Cheater Votes (${confidence}%) out of ${totalVotes} total.
+                        ${cheaterVotes} Cheater Votes (${confidence}%) out of ${totalVotes} total.
                     </span>
                 `;
                 listElement.appendChild(listItem);
             });
         }
     } catch (error) {
+        // This catch block will report any other unexpected errors.
         console.error("Failed to update top cheaters list:", error);
-        listElement.innerHTML = '<li>Error loading leaderboard.</li>';
+        listElement.innerHTML = '<li>Error loading leaderboard. Please check the console.</li>';
     }
 }
