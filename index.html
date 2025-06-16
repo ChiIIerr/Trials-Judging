@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Destiny 2 Cheat Detector</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <h1>Is this player cheating?</h1>
+    <p>Review the stats and cast your vote. Your vote helps train the community's perception.</p>
+
+    <div id="loading">Loading next player...</div>
+
+    <div id="player-card" style="display:none;">
+        <h2 id="player-name"></h2>
+        <div id="player-stats"></div>
+        <div id="player-links"></div>
+        
+        <div class="voting-booth">
+            <h3>Your Verdict:</h3>
+            <button id="vote-cheater" onclick="castVote('cheater')">🚨 Cheater</button>
+            <button id="vote-legit" onclick="castVote('legit')">😇 Legitimate</button>
+        </div>
+    </div>
+
+    <div id="results" style="display:none;">
+        <h3>Community Verdict:</h3>
+        <p id="confidence-level"></p>
+        <p id="vote-counts"></p>
+        <button onclick="loadRandomPlayer()">Next Player</button>
+    </div>
+
+    <a href="submit.html">Report a new player</a>
+
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+    <script src="app.js"></script>
+    <script>
+        // Load the first player when the page loads
+        window.onload = loadRandomPlayer;
+    </script>
+</body>
+</html>
